@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ================================
-# CONFIG STREAMLIT
+# CONFIG
 # ================================
 st.set_page_config(
     page_title="SURVEILLANCE Portfolio",
@@ -30,9 +30,9 @@ TICKERS = {
 }
 
 # ================================
-# CACHE DOWNLOAD
+# CACHE
 # ================================
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600)
 def load_data(ticker):
     return yf.download(
         ticker,
@@ -40,6 +40,13 @@ def load_data(ticker):
         interval="1d",
         progress=False
     )
+
+@st.cache_data(ttl=3600)
+def run_arima(series, steps):
+    model = ARIMA(series, order=(2, 0, 2)).fit()
+    forecast = model.forecast(steps=steps)
+    conf = model.get_forecast(steps=steps).conf_int()
+    return forecast, conf
 
 # ================================
 # UI
@@ -49,18 +56,8 @@ st.title("📈 SURVEILLANCE Portfolio – Stock Screener")
 with st.sidebar:
     st.header("Parametri")
 
-    historical_period = st.selectbox(
-        "Numero valori storici",
-        [120, 360, 720],
-        index=0
-    )
-
-    forecast_period = st.selectbox(
-        "Previsione futura (giorni)",
-        [30, 60, 120],
-        index=0
-    )
-
+    historical_period = st.selectbox("Numero valori storici", [120, 360, 720])
+    forecast_period = st.selectbox("Previsione futura (giorni)", [30, 60, 120])
     run = st.button("Applica")
 
 # ================================
@@ -68,75 +65,89 @@ with st.sidebar:
 # ================================
 if run:
 
-    results = []
+    rows = []
 
-    with st.spinner("Scarico dati e calcolo forecast..."):
-        for ticker in TICKERS.values():
+    with st.spinner("Calcolo in corso..."):
+        for name, ticker in TICKERS.items():
+
+            row = {
+                "NAME": name,
+                "TICKER": ticker,
+                "ON MKT": np.nan,
+                "MIN": np.nan,
+                "AVG": np.nan,
+                "MAX": np.nan,
+                "FORECAST MIN": np.nan,
+                "FORECAST VALUE": np.nan,
+                "FORECAST MAX": np.nan,
+                "Δ % FORECAST": np.nan,
+                "STATUS": "OK"
+            }
+
             try:
                 df_raw = load_data(ticker)
 
                 if df_raw.empty or "Close" not in df_raw.columns:
+                    row["STATUS"] = "NO DATA"
+                    rows.append(row)
                     continue
 
-                on_mkt = float(df_raw["Close"].iloc[-1])
+                row["ON MKT"] = float(df_raw["Close"].iloc[-1])
 
                 df_close = df_raw[["Close"]].dropna().tail(historical_period)
 
                 if len(df_close) < 20:
+                    row["STATUS"] = "INSUFFICIENT DATA"
+                    rows.append(row)
                     continue
 
-                model = ARIMA(df_close["Close"], order=(2, 0, 2)).fit()
-                forecast = model.forecast(steps=forecast_period)
-                conf = model.get_forecast(steps=forecast_period).conf_int()
+                forecast, conf = run_arima(df_close["Close"], forecast_period)
 
-                delta_pct = ((forecast.iloc[-1] - on_mkt) / on_mkt) * 100
-
-                results.append({
-                    "TICKER": ticker,
-                    "ON MKT": on_mkt,
-                    "MIN": df_close["Close"].min(),
-                    "AVG": df_close["Close"].mean(),
-                    "MAX": df_close["Close"].max(),
-                    "FORECAST MIN": conf.iloc[-1, 0],
-                    "FORECAST VALUE": forecast.iloc[-1],
-                    "FORECAST MAX": conf.iloc[-1, 1],
-                    "Δ % FORECAST": delta_pct
-                })
+                row["MIN"] = df_close["Close"].min()
+                row["AVG"] = df_close["Close"].mean()
+                row["MAX"] = df_close["Close"].max()
+                row["FORECAST MIN"] = conf.iloc[-1, 0]
+                row["FORECAST VALUE"] = forecast.iloc[-1]
+                row["FORECAST MAX"] = conf.iloc[-1, 1]
+                row["Δ % FORECAST"] = (
+                    (row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100
+                )
 
             except Exception:
-                continue
+                row["STATUS"] = "ARIMA ERROR"
 
-    if len(results) == 0:
-        st.warning("Nessun ticker valido elaborato.")
-        st.stop()
+            rows.append(row)
 
-    df = pd.DataFrame(results).round(2)
+    df = pd.DataFrame(rows).round(2)
 
     # ================================
-    # COLORAZIONE (STREAMLIT SAFE)
+    # COLORAZIONE
     # ================================
     def color_rows(row):
-        colors = []
+        styles = []
         for col in row.index:
-            if col == "FORECAST VALUE":
-                if row["FORECAST VALUE"] > row["ON MKT"]:
-                    colors.append("color: blue; font-weight: bold")
+            if col == "FORECAST VALUE" and not pd.isna(row[col]):
+                if row[col] > row["ON MKT"]:
+                    styles.append("color: blue; font-weight: bold")
                 else:
-                    colors.append("color: red; font-weight: bold")
-            elif col == "Δ % FORECAST":
-                if row["Δ % FORECAST"] > 20:
-                    colors.append("color: green; font-weight: bold")
-                elif row["Δ % FORECAST"] < 0:
-                    colors.append("color: magenta; font-weight: bold")
+                    styles.append("color: red; font-weight: bold")
+            elif col == "Δ % FORECAST" and not pd.isna(row[col]):
+                if row[col] > 20:
+                    styles.append("color: green; font-weight: bold")
+                elif row[col] < 0:
+                    styles.append("color: magenta; font-weight: bold")
                 else:
-                    colors.append("")
+                    styles.append("")
+            elif col == "STATUS" and row[col] != "OK":
+                styles.append("color: orange; font-weight: bold")
             else:
-                colors.append("")
-        return colors
+                styles.append("")
+        return styles
 
-    styled_df = df.style.apply(color_rows, axis=1)
-
-    st.dataframe(styled_df, use_container_width=True)
+    st.dataframe(
+        df.style.apply(color_rows, axis=1),
+        use_container_width=True
+    )
 
 else:
     st.info("👈 Imposta i parametri e premi **Applica**")
