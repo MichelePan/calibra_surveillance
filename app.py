@@ -141,9 +141,9 @@ if run:
 
                 forecast, conf = run_arima(df_close["Close"], forecast_period)
 
-                row["MIN"] = df_close["Close"].min()
-                row["AVG"] = df_close["Close"].mean()
-                row["MAX"] = df_close["Close"].max()
+                row["MIN"] = float(df_close["Close"].min().round(2))
+                row["AVG"] = float(df_close["Close"].mean().round(2))
+                row["MAX"] = float(df_close["Close"].max().round(2))
                 row["FORECAST MIN"] = conf.iloc[-1, 0]
                 row["FORECAST VALUE"] = forecast.iloc[-1]
                 row["FORECAST MAX"] = conf.iloc[-1, 1]
