@@ -129,4 +129,72 @@ if run:
                 if df_raw.empty or "Close" not in df_raw.columns:
                     row["STATUS"] = "NO DATA"
                     rows.append(row)
-                    con
+                    continue
+
+                row["ON MKT"] = float(df_raw["Close"].iloc[-1].round(2))
+
+                df_close = df_raw[["Close"]].dropna().tail(historical_period)
+
+                if len(df_close) < 20:
+                    row["STATUS"] = "INSUFFICIENT DATA"
+                    rows.append(row)
+                    continue
+
+                forecast, conf = run_arima(df_close["Close"], forecast_period)
+
+                row["MIN"] = float(df_close["Close"].min().round(2))
+                row["AVG"] = float(df_close["Close"].mean().round(2))
+                row["MAX"] = float(df_close["Close"].max().round(2))
+                row["FORECAST MIN"] = float(conf.iloc[-1, 0].round(2))
+                row["FORECAST VALUE"] = float(forecast.iloc[-1].round(2))
+                row["FORECAST MAX"] = float(conf.iloc[-1, 1].round(2))
+                row["Δ % FORECAST"] = float(
+                    ((row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100).round(2)
+                )
+
+            except Exception:
+                row["STATUS"] = "ARIMA ERROR"
+
+            rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # ================================
+    # COLORAZIONE
+    # ================================
+    def color_rows(row):
+        styles = []
+        for col in row.index:
+            if col == "FORECAST VALUE" and not pd.isna(row[col]):
+                if row[col] > row["ON MKT"]:
+                    styles.append("color: blue; font-weight: bold")
+                else:
+                    styles.append("color: red; font-weight: bold")
+            elif col == "Δ % FORECAST" and not pd.isna(row[col]):
+                if row[col] > 20:
+                    styles.append("color: green; font-weight: bold")
+                elif row[col] < 0:
+                    styles.append("color: magenta; font-weight: bold")
+                else:
+                    styles.append("")
+            elif col == "STATUS" and row[col] != "OK":
+                styles.append("color: orange; font-weight: bold")
+            else:
+                styles.append("")
+        return styles
+
+    # ================================
+    # ALTEZZA TABELLA DINAMICA (NESSUNO SCROLL)
+    # ================================
+    row_height = 35
+    header_height = 40
+    table_height = header_height + row_height * len(df)
+
+    st.dataframe(
+        df.style.apply(color_rows, axis=1),
+        use_container_width=True,
+        height=table_height
+    )
+
+else:
+    st.info("👈 Imposta i parametri e premi **Applica**")
