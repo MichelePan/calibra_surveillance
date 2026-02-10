@@ -182,9 +182,14 @@ if run:
                 styles.append("")
         return styles
 
+    row_height = 35          # px per riga (ottimale)
+    header_height = 40       # header
+    table_height = header_height + row_height * len(df)
+    
     st.dataframe(
         df.style.apply(color_rows, axis=1),
-        use_container_width=True
+        use_container_width=True,
+        height=table_height
     )
 
 else:
