@@ -128,14 +128,18 @@ if run:
                     rows.append(row)
                     continue
 
-                row["ON MKT"] = float(df_raw["Close"].iloc[-1].round(2))
-
-                df_close = df_raw[["Close"]].dropna().tail(historical_period)
+                # --------------------------
+                # Pulizia serie
+                # --------------------------
+                df_close = df_raw[["Close"]].tail(historical_period)
                 df_close["Close"] = pd.to_numeric(df_close["Close"], errors="coerce")
                 df_close = df_close.dropna()
 
-
                 if len(df_close) < 10:
+                    row["ON MKT"] = float(df_close["Close"].iloc[-1].round(2)) if len(df_close) > 0 else np.nan
+                    row["MIN"] = float(df_close["Close"].min().round(2)) if len(df_close) > 0 else np.nan
+                    row["AVG"] = float(df_close["Close"].mean().round(2)) if len(df_close) > 0 else np.nan
+                    row["MAX"] = float(df_close["Close"].max().round(2)) if len(df_close) > 0 else np.nan
                     row["FORECAST MIN"] = row["MIN"]
                     row["FORECAST VALUE"] = row["ON MKT"]
                     row["FORECAST MAX"] = row["MAX"]
@@ -144,28 +148,29 @@ if run:
                     rows.append(row)
                     continue
 
-                # ==== ARIMA CON FALLBACK ====
-                try:
-                    forecast, conf = run_arima(df_close["Close"], forecast_period)
-                except Exception:
-                    # fallback: usa ultimo valore e min/max serie
-                    forecast = pd.Series([df_close["Close"].iloc[-1]] * forecast_period)
-                    conf = pd.DataFrame({
-                        0: [df_close["Close"].min()] * forecast_period,
-                        1: [df_close["Close"].max()] * forecast_period
-                    })
-                    row["STATUS"] = "ARIMA FALLBACK"
-
-                # ==== ASSEGNA VALORI FORMATTATI ====
+                row["ON MKT"] = float(df_close["Close"].iloc[-1].round(2))
                 row["MIN"] = float(df_close["Close"].min().round(2))
                 row["AVG"] = float(df_close["Close"].mean().round(2))
                 row["MAX"] = float(df_close["Close"].max().round(2))
-                row["FORECAST MIN"] = float(conf.iloc[-1, 0].round(2))
-                row["FORECAST VALUE"] = float(forecast.iloc[-1].round(2))
-                row["FORECAST MAX"] = float(conf.iloc[-1, 1].round(2))
-                row["Δ % FORECAST"] = float(
-                    ((row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100).round(2)
-                )
+
+                # --------------------------
+                # ARIMA + fallback
+                # --------------------------
+                try:
+                    forecast, conf = run_arima(df_close["Close"], forecast_period)
+                    row["FORECAST MIN"] = float(conf.iloc[-1, 0].round(2))
+                    row["FORECAST VALUE"] = float(forecast.iloc[-1].round(2))
+                    row["FORECAST MAX"] = float(conf.iloc[-1, 1].round(2))
+                    row["Δ % FORECAST"] = float(
+                        ((row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100).round(2)
+                    )
+                except Exception:
+                    # fallback sicuro
+                    row["FORECAST MIN"] = row["MIN"]
+                    row["FORECAST VALUE"] = row["ON MKT"]
+                    row["FORECAST MAX"] = row["MAX"]
+                    row["Δ % FORECAST"] = 0
+                    row["STATUS"] = "ARIMA FALLBACK"
 
             except Exception:
                 row["STATUS"] = "ERROR"
