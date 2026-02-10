@@ -7,6 +7,9 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+# ================================
+# CONFIG STREAMLIT
+# ================================
 st.set_page_config(
     page_title="SURVEILLANCE Portfolio",
     layout="wide"
@@ -23,16 +26,20 @@ TICKERS = {
     "BANK OF AMERICA CORP": "BAC",
     "NETFLIX": "NFLX",
     "NVIDIA": "NVDA",
-    "TESLA": "TSLA"
+    "TESLA": "TSLA",
 }
 
 # ================================
-# FUNZIONE CLOSE
+# CACHE DOWNLOAD
 # ================================
-def extract_close_column(df):
-    if 'Close' in df.columns:
-        return df[['Close']]
-    raise ValueError("Close non trovata")
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_data(ticker):
+    return yf.download(
+        ticker,
+        period="5y",
+        interval="1d",
+        progress=False
+    )
 
 # ================================
 # UI
@@ -66,19 +73,19 @@ if run:
     with st.spinner("Scarico dati e calcolo forecast..."):
         for ticker in TICKERS.values():
             try:
-                df_raw = yf.download(
-                    ticker,
-                    period="5y",
-                    interval="1d",
-                    progress=False
-                )
+                df_raw = load_data(ticker)
 
-                on_mkt = float(df_raw['Close'].iloc[-1])
+                if df_raw.empty or "Close" not in df_raw.columns:
+                    continue
 
-                df_close = extract_close_column(df_raw).dropna()
-                df_close = df_close.tail(historical_period)
+                on_mkt = float(df_raw["Close"].iloc[-1])
 
-                model = ARIMA(df_close['Close'], order=(2, 0, 2)).fit()
+                df_close = df_raw[["Close"]].dropna().tail(historical_period)
+
+                if len(df_close) < 20:
+                    continue
+
+                model = ARIMA(df_close["Close"], order=(2, 0, 2)).fit()
                 forecast = model.forecast(steps=forecast_period)
                 conf = model.get_forecast(steps=forecast_period).conf_int()
 
@@ -87,9 +94,9 @@ if run:
                 results.append({
                     "TICKER": ticker,
                     "ON MKT": on_mkt,
-                    "MIN": df_close['Close'].min(),
-                    "AVG": df_close['Close'].mean(),
-                    "MAX": df_close['Close'].max(),
+                    "MIN": df_close["Close"].min(),
+                    "AVG": df_close["Close"].mean(),
+                    "MAX": df_close["Close"].max(),
                     "FORECAST MIN": conf.iloc[-1, 0],
                     "FORECAST VALUE": forecast.iloc[-1],
                     "FORECAST MAX": conf.iloc[-1, 1],
@@ -97,38 +104,39 @@ if run:
                 })
 
             except Exception:
-                pass
+                continue
 
-    df = pd.DataFrame(results)
+    if len(results) == 0:
+        st.warning("Nessun ticker valido elaborato.")
+        st.stop()
+
+    df = pd.DataFrame(results).round(2)
 
     # ================================
-    # STYLING
+    # COLORAZIONE (STREAMLIT SAFE)
     # ================================
-    # Rimuove righe con NaN (fondamentale)
-    df = df.dropna().reset_index(drop=True)
-    
-    def highlight_forecast(row):
-    styles = []
-    for col in row.index:
-        if col == "FORECAST VALUE":
-            if row["FORECAST VALUE"] > row["ON MKT"]:
-                styles.append("color: blue; font-weight: bold")
+    def color_rows(row):
+        colors = []
+        for col in row.index:
+            if col == "FORECAST VALUE":
+                if row["FORECAST VALUE"] > row["ON MKT"]:
+                    colors.append("color: blue; font-weight: bold")
+                else:
+                    colors.append("color: red; font-weight: bold")
+            elif col == "Δ % FORECAST":
+                if row["Δ % FORECAST"] > 20:
+                    colors.append("color: green; font-weight: bold")
+                elif row["Δ % FORECAST"] < 0:
+                    colors.append("color: magenta; font-weight: bold")
+                else:
+                    colors.append("")
             else:
-                styles.append("color: red; font-weight: bold")
-        elif col == "Δ % FORECAST":
-            if row["Δ % FORECAST"] > 20:
-                styles.append("color: green; font-weight: bold")
-            elif row["Δ % FORECAST"] < 0:
-                styles.append("color: magenta; font-weight: bold")
-            else:
-                styles.append("")
-        else:
-            styles.append("")
-    return styles
-    
-    styled = df.style.apply(highlight_forecast, axis=1)
-    
-    st.dataframe(styled, use_container_width=True)
+                colors.append("")
+        return colors
+
+    styled_df = df.style.apply(color_rows, axis=1)
+
+    st.dataframe(styled_df, use_container_width=True)
 
 else:
     st.info("👈 Imposta i parametri e premi **Applica**")
