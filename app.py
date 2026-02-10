@@ -104,22 +104,30 @@ if run:
     # ================================
     # STYLING
     # ================================
-    def color_forecast(val, on_mkt):
-        if val > on_mkt:
-            return "color: blue; font-weight: bold"
-        return "color: red; font-weight: bold"
-
-    styled = df.style \
-        .format("{:.2f}") \
-        .apply(
-            lambda x: [
-                color_forecast(x["FORECAST VALUE"], x["ON MKT"])
-                if col == "FORECAST VALUE" else ""
-                for col in df.columns
-            ],
-            axis=1
-        )
-
+    # Rimuove righe con NaN (fondamentale)
+    df = df.dropna().reset_index(drop=True)
+    
+    def highlight_forecast(row):
+    styles = []
+    for col in row.index:
+        if col == "FORECAST VALUE":
+            if row["FORECAST VALUE"] > row["ON MKT"]:
+                styles.append("color: blue; font-weight: bold")
+            else:
+                styles.append("color: red; font-weight: bold")
+        elif col == "Δ % FORECAST":
+            if row["Δ % FORECAST"] > 20:
+                styles.append("color: green; font-weight: bold")
+            elif row["Δ % FORECAST"] < 0:
+                styles.append("color: magenta; font-weight: bold")
+            else:
+                styles.append("")
+        else:
+            styles.append("")
+    return styles
+    
+    styled = df.style.apply(highlight_forecast, axis=1)
+    
     st.dataframe(styled, use_container_width=True)
 
 else:
