@@ -192,6 +192,5 @@ if run:
         height=table_height
     )
     
-    st.table(df)
 else:
     st.info("👈 Imposta i parametri e premi **Applica**")
