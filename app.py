@@ -122,11 +122,21 @@ if run:
 
             try:
                 df_raw = load_data(ticker)
-
+                
                 if df_raw.empty or "Close" not in df_raw.columns:
                     row["STATUS"] = "NO DATA"
                     rows.append(row)
                     continue
+                
+                # estrai solo i valori numerici disponibili
+                df_close = df_raw[["Close"]].tail(historical_period)
+                df_close = df_close[pd.to_numeric(df_close["Close"], errors="coerce").notna()]
+                
+                if len(df_close) == 0:
+                    row["STATUS"] = "NO NUMERIC DATA"
+                    rows.append(row)
+                    continue
+
 
                 # --------------------------
                 # Pulizia serie
