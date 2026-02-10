@@ -68,7 +68,7 @@ TICKERS = {
 }
 
 # ================================
-# CACHE DOWNLOAD YFINANCE
+# CACHE
 # ================================
 @st.cache_data(ttl=3600)
 def load_data(ticker):
@@ -79,9 +79,6 @@ def load_data(ticker):
         progress=False
     )
 
-# ================================
-# CACHE ARIMA
-# ================================
 @st.cache_data(ttl=3600)
 def run_arima(series, steps):
     model = ARIMA(series, order=(2, 0, 2)).fit()
@@ -140,8 +137,19 @@ if run:
                     rows.append(row)
                     continue
 
-                forecast, conf = run_arima(df_close["Close"], forecast_period)
+                # ==== ARIMA CON FALLBACK ====
+                try:
+                    forecast, conf = run_arima(df_close["Close"], forecast_period)
+                except Exception:
+                    # fallback: usa ultimo valore e min/max serie
+                    forecast = pd.Series([df_close["Close"].iloc[-1]] * forecast_period)
+                    conf = pd.DataFrame({
+                        0: [df_close["Close"].min()] * forecast_period,
+                        1: [df_close["Close"].max()] * forecast_period
+                    })
+                    row["STATUS"] = "ARIMA FALLBACK"
 
+                # ==== ASSEGNA VALORI FORMATTATI ====
                 row["MIN"] = float(df_close["Close"].min().round(2))
                 row["AVG"] = float(df_close["Close"].mean().round(2))
                 row["MAX"] = float(df_close["Close"].max().round(2))
@@ -153,7 +161,7 @@ if run:
                 )
 
             except Exception:
-                row["STATUS"] = "ARIMA ERROR"
+                row["STATUS"] = "ERROR"
 
             rows.append(row)
 
@@ -166,10 +174,9 @@ if run:
         styles = []
         for col in row.index:
             if col == "FORECAST VALUE" and not pd.isna(row[col]):
-                if row[col] > row["ON MKT"]:
-                    styles.append("color: blue; font-weight: bold")
-                else:
-                    styles.append("color: red; font-weight: bold")
+                styles.append(
+                    "color: blue; font-weight: bold" if row[col] > row["ON MKT"] else "color: red; font-weight: bold"
+                )
             elif col == "Δ % FORECAST" and not pd.isna(row[col]):
                 if row[col] > 20:
                     styles.append("color: green; font-weight: bold")
@@ -184,7 +191,7 @@ if run:
         return styles
 
     # ================================
-    # ALTEZZA TABELLA DINAMICA (NESSUNO SCROLL)
+    # ALTEZZA DINAMICA
     # ================================
     row_height = 35
     header_height = 40
