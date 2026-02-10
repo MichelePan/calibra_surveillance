@@ -141,15 +141,13 @@ if run:
 
                 forecast, conf = run_arima(df_close["Close"], forecast_period)
 
-                row["MIN"] = df_close["Close"].min()
-                row["AVG"] = df_close["Close"].mean()
-                row["MAX"] = df_close["Close"].max()
-                row["FORECAST MIN"] = conf.iloc[-1, 0]
-                row["FORECAST VALUE"] = forecast.iloc[-1]
-                row["FORECAST MAX"] = conf.iloc[-1, 1]
-                row["Δ % FORECAST"] = (
-                    (row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100
-                )
+                row["MIN"] = float(df_close["Close"].min().round(2))
+                row["AVG"] = float(df_close["Close"].mean().round(2))
+                row["MAX"] = float(df_close["Close"].max().round(2))
+                row["FORECAST MIN"] = float(conf.iloc[-1, 0].round(2))
+                row["FORECAST VALUE"] = float(forecast.iloc[-1].round(2))
+                row["FORECAST MAX"] = float(conf.iloc[-1, 1].round(2))
+                row["Δ % FORECAST"] = float(((row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100).round(2))
 
             except Exception:
                 row["STATUS"] = "ARIMA ERROR"
