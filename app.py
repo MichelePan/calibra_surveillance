@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ================================
-# CONFIG
+# CONFIG STREAMLIT
 # ================================
 st.set_page_config(
     page_title="SURVEILLANCE Portfolio",
@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # ================================
-# TICKERS
+# TICKERS COMPLETI
 # ================================
 TICKERS = {
     "ALPHABET INC": "GOOGL",
@@ -68,7 +68,7 @@ TICKERS = {
 }
 
 # ================================
-# CACHE
+# CACHE DOWNLOAD YFINANCE
 # ================================
 @st.cache_data(ttl=3600)
 def load_data(ticker):
@@ -79,6 +79,9 @@ def load_data(ticker):
         progress=False
     )
 
+# ================================
+# CACHE ARIMA
+# ================================
 @st.cache_data(ttl=3600)
 def run_arima(series, steps):
     model = ARIMA(series, order=(2, 0, 2)).fit()
@@ -93,16 +96,14 @@ st.title("📈 SURVEILLANCE Portfolio – Stock Screener")
 
 with st.sidebar:
     st.header("Parametri")
-
     historical_period = st.selectbox("Numero valori storici", [120, 360, 720])
     forecast_period = st.selectbox("Previsione futura (giorni)", [30, 60, 120])
     run = st.button("Applica")
 
 # ================================
-# LOGICA
+# LOGICA PRINCIPALE
 # ================================
 if run:
-
     rows = []
 
     with st.spinner("Calcolo in corso..."):
@@ -128,67 +129,4 @@ if run:
                 if df_raw.empty or "Close" not in df_raw.columns:
                     row["STATUS"] = "NO DATA"
                     rows.append(row)
-                    continue
-
-                row["ON MKT"] = float(df_raw["Close"].iloc[-1])
-
-                df_close = df_raw[["Close"]].dropna().tail(historical_period)
-
-                if len(df_close) < 20:
-                    row["STATUS"] = "INSUFFICIENT DATA"
-                    rows.append(row)
-                    continue
-
-                forecast, conf = run_arima(df_close["Close"], forecast_period)
-
-                row["MIN"] = float(df_close["Close"].min().round(2))
-                row["AVG"] = float(df_close["Close"].mean().round(2))
-                row["MAX"] = float(df_close["Close"].max().round(2))
-                row["FORECAST MIN"] = float(conf.iloc[-1, 0].round(2))
-                row["FORECAST VALUE"] = float(forecast.iloc[-1].round(2))
-                row["FORECAST MAX"] = float(conf.iloc[-1, 1].round(2))
-                row["Δ % FORECAST"] = float(((row["FORECAST VALUE"] - row["ON MKT"]) / row["ON MKT"] * 100).round(2))
-
-            except Exception:
-                row["STATUS"] = "ARIMA ERROR"
-
-            rows.append(row)
-
-    df = pd.DataFrame(rows).round(2)
-
-    # ================================
-    # COLORAZIONE
-    # ================================
-    def color_rows(row):
-        styles = []
-        for col in row.index:
-            if col == "FORECAST VALUE" and not pd.isna(row[col]):
-                if row[col] > row["ON MKT"]:
-                    styles.append("color: blue; font-weight: bold")
-                else:
-                    styles.append("color: red; font-weight: bold")
-            elif col == "Δ % FORECAST" and not pd.isna(row[col]):
-                if row[col] > 20:
-                    styles.append("color: green; font-weight: bold")
-                elif row[col] < 0:
-                    styles.append("color: magenta; font-weight: bold")
-                else:
-                    styles.append("")
-            elif col == "STATUS" and row[col] != "OK":
-                styles.append("color: orange; font-weight: bold")
-            else:
-                styles.append("")
-        return styles
-
-    row_height = 35          # px per riga (ottimale)
-    header_height = 40       # header
-    table_height = header_height + row_height * len(df)
-    
-    st.dataframe(
-        df.style.apply(color_rows, axis=1),
-        use_container_width=True,
-        height=table_height
-    )
-
-else:
-    st.info("👈 Imposta i parametri e premi **Applica**")
+                    con
