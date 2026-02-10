@@ -131,9 +131,16 @@ if run:
                 row["ON MKT"] = float(df_raw["Close"].iloc[-1].round(2))
 
                 df_close = df_raw[["Close"]].dropna().tail(historical_period)
+                df_close["Close"] = pd.to_numeric(df_close["Close"], errors="coerce")
+                df_close = df_close.dropna()
 
-                if len(df_close) < 20:
-                    row["STATUS"] = "INSUFFICIENT DATA"
+
+                if len(df_close) < 10:
+                    row["FORECAST MIN"] = row["MIN"]
+                    row["FORECAST VALUE"] = row["ON MKT"]
+                    row["FORECAST MAX"] = row["MAX"]
+                    row["Δ % FORECAST"] = 0
+                    row["STATUS"] = "TOO SHORT FOR ARIMA"
                     rows.append(row)
                     continue
 
